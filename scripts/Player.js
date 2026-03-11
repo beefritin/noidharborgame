@@ -5,21 +5,23 @@ export class Player {
         // Try to load Noid sprite, fallback to rectangle
         this.sprite = scene.matter.add.sprite(x, y, 'noid');
 
-        if (this.sprite.texture.key === '__MISSING') {
-            this.sprite.destroy();
+        if (!this.sprite || this.sprite.texture.key === '__MISSING') {
+            if (this.sprite) this.sprite.destroy();
             // Create a Matter-wrapped rectangle Game Object
             const rect = scene.add.rectangle(x, y, 32, 48, 0xff4d4d);
             this.sprite = scene.matter.add.gameObject(rect);
-            this.sprite.body.label = 'player';
         }
 
+        this.sprite.body.label = 'player';
+
         this.sprite.setFixedRotation();
-        this.sprite.setFriction(0.01);
-        this.sprite.setBounce(0.1);
+        this.sprite.setFriction(0.01, 0.02); // Lower horizontal friction, some air resistance
+        this.sprite.setBounce(0.05);
 
         // Movement Settings
-        this.speed = 0.01;
-        this.jumpForce = 12;
+        this.moveSpeed = 0.5;
+        this.maxVelocityX = 8;
+        this.jumpForce = 10;
         this.canDoubleJump = false;
         this.isGrounded = false;
 
@@ -32,36 +34,72 @@ export class Player {
         // Input Keys
         this.keys = scene.input.keyboard.addKeys('K,SHIFT,SPACE,W,A,S,D');
 
-        // Floor Detection
+        // Floor Detection - Better logic using sensors or tracking contacts
         scene.matter.world.on('collisionactive', (event) => {
             event.pairs.forEach(pair => {
-                if (pair.bodyA === this.sprite.body || pair.bodyB === this.sprite.body) {
-                    this.isGrounded = true;
-                    this.canDoubleJump = true;
+                const { bodyA, bodyB } = pair;
+                if (bodyA === this.sprite.body || bodyB === this.sprite.body) {
+                    // Check if collision is roughly below the player
+                    const otherBody = bodyA === this.sprite.body ? bodyB : bodyA;
+                    if (otherBody.position.y > this.sprite.y + 10) {
+                        this.isGrounded = true;
+                        this.canDoubleJump = true;
+                    }
+                }
+            });
+        });
+
+        scene.matter.world.on('collisionend', (event) => {
+            event.pairs.forEach(pair => {
+                const { bodyA, bodyB } = pair;
+                if (bodyA === this.sprite.body || bodyB === this.sprite.body) {
+                    this.isGrounded = false;
                 }
             });
         });
     }
 
     update(cursors) {
+        const vel = this.sprite.body.velocity;
+        const jumpJustDown = Phaser.Input.Keyboard.JustDown(this.keys.SPACE) || Phaser.Input.Keyboard.JustDown(cursors.up) || Phaser.Input.Keyboard.JustDown(this.keys.W);
+        const jumpIsDown = this.keys.SPACE.isDown || cursors.up.isDown || this.keys.W.isDown;
+
         // Horizontal Movement
         if (cursors.left.isDown || this.keys.A.isDown) {
-            this.sprite.applyForce({ x: -this.speed, y: 0 });
+            this.sprite.setVelocityX(Math.max(vel.x - this.moveSpeed, -this.maxVelocityX));
             if (this.sprite.setFlipX) this.sprite.setFlipX(true);
         } else if (cursors.right.isDown || this.keys.D.isDown) {
-            this.sprite.applyForce({ x: this.speed, y: 0 });
+            this.sprite.setVelocityX(Math.min(vel.x + this.moveSpeed, this.maxVelocityX));
             if (this.sprite.setFlipX) this.sprite.setFlipX(false);
+        } else {
+            // Deceleration when not moving
+            if (this.isGrounded) {
+                this.sprite.setVelocityX(vel.x * 0.9);
+            } else {
+                this.sprite.setVelocityX(vel.x * 0.98); // Less drag in air
+            }
         }
 
         // Jump / Double Jump
-        if (Phaser.Input.Keyboard.JustDown(this.keys.SPACE) || Phaser.Input.Keyboard.JustDown(cursors.up) || Phaser.Input.Keyboard.JustDown(this.keys.W)) {
+        if (jumpJustDown) {
             if (this.isGrounded) {
                 this.sprite.setVelocityY(-this.jumpForce);
                 this.isGrounded = false;
             } else if (this.canDoubleJump) {
-                this.sprite.setVelocityY(-(this.jumpForce * 0.8));
+                this.sprite.setVelocityY(-(this.jumpForce * 0.85));
                 this.canDoubleJump = false;
             }
+        }
+
+        // Variable Jump Height: If jump button is released while moving up, cut the jump short
+        if (!jumpIsDown && vel.y < -3) {
+            this.sprite.setVelocityY(vel.y * 0.6);
+        }
+
+        // Update player light position if it exists
+        if (this.light) {
+            this.light.x = this.sprite.x;
+            this.light.y = this.sprite.y;
         }
 
         // Grapple Key Logic
@@ -75,17 +113,17 @@ export class Player {
         // Draw Grapple Line
         this.line.clear();
         if (this.isGrappling && this.grapplePoint) {
-            this.line.lineStyle(3, 0xffffff, 1);
+            this.line.lineStyle(2, 0xeeeeee, 1);
             this.line.beginPath();
             this.line.moveTo(this.sprite.x, this.sprite.y);
             this.line.lineTo(this.grapplePoint.x, this.grapplePoint.y);
             this.line.strokePath();
 
-            // Swing Impulse
+            // Swing Impulse - More subtle during grapple
             if (cursors.left.isDown || this.keys.A.isDown) {
-                this.sprite.applyForce({ x: -0.005, y: 0 });
+                this.sprite.applyForce({ x: -0.002, y: 0 });
             } else if (cursors.right.isDown || this.keys.D.isDown) {
-                this.sprite.applyForce({ x: 0.005, y: 0 });
+                this.sprite.applyForce({ x: 0.002, y: 0 });
             }
         }
     }
@@ -93,11 +131,12 @@ export class Player {
     startGrapple() {
         const bodies = this.scene.matter.world.localWorld.bodies;
         let nearestBody = null;
-        let minDist = 350;
+        let minDist = 450;
 
         bodies.forEach(body => {
             if (body.label === 'anchor') {
                 const dist = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, body.position.x, body.position.y);
+                // Can only grapple to things above
                 if (dist < minDist && body.position.y < this.sprite.y) {
                     minDist = dist;
                     nearestBody = body;
@@ -109,7 +148,9 @@ export class Player {
             this.isGrappling = true;
             this.grapplePoint = { x: nearestBody.position.x, y: nearestBody.position.y };
             const currentDist = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, nearestBody.position.x, nearestBody.position.y);
-            this.constraint = this.scene.matter.add.constraint(this.sprite.body, nearestBody, currentDist * 0.8, 0.1);
+
+            // Create a constraint that's slightly elastic
+            this.constraint = this.scene.matter.add.constraint(this.sprite.body, nearestBody, currentDist, 0.1);
         }
     }
 
@@ -120,8 +161,9 @@ export class Player {
                 this.scene.matter.world.removeConstraint(this.constraint);
                 this.constraint = null;
             }
+            // Give a little boost on release
             const vel = this.sprite.body.velocity;
-            this.sprite.setVelocity(vel.x * 1.5, vel.y);
+            this.sprite.setVelocity(vel.x * 1.25, vel.y - 2);
         }
     }
 }

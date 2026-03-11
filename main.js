@@ -1,119 +1,191 @@
 import { Player } from './scripts/Player.js';
 
-const config = {
-    type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    parent: 'game-container',
-    physics: {
-        default: 'matter',
-        matter: {
-            gravity: { y: 1 },
-            debug: true // Showing hitboxes to help testing
-        }
-    },
-    scene: {
-        preload: preload,
-        create: create,
-        update: update
+class TitleScene extends Phaser.Scene {
+    constructor() {
+        super('TitleScene');
     }
-};
 
-const game = new Phaser.Game(config);
-let player;
-let cursors;
-let score = 0;
-let scoreText;
+    create() {
+        const { width, height } = this.scale;
 
-function preload() {
-    // Attempting to load assets, fallback to placeholders if they don't exist
-    this.load.image('noid', 'assets/noid_sprite.png');
-    this.load.image('pepperoni', 'assets/pepperoni.png');
-    this.load.image('tileset', 'assets/tileset_port.png');
+        this.add.rectangle(width / 2, height / 2, width, height, 0x1a2b3c);
+
+        this.add.text(width / 2, height / 3, 'YO! NOID:\nHARBOR CHEESE', {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '40px',
+            fill: '#ffcc00',
+            align: 'center'
+        }).setOrigin(0.5);
+
+        const startBtn = this.add.text(width / 2, height * 2 / 3, 'PRESS START', {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '20px',
+            fill: '#ffffff'
+        }).setOrigin(0.5).setInteractive();
+
+        this.tweens.add({
+            targets: startBtn,
+            alpha: 0,
+            duration: 500,
+            yoyo: true,
+            repeat: -1
+        });
+
+        this.input.keyboard.on('keydown', () => {
+            this.scene.start('GameScene');
+        });
+
+        startBtn.on('pointerdown', () => {
+            this.scene.start('GameScene');
+        });
+    }
 }
 
-function create() {
-    const scene = this;
+class GameOverScene extends Phaser.Scene {
+    constructor() {
+        super('GameOverScene');
+    }
 
-    // Background
-    this.add.rectangle(400, 300, 800, 600, 0x1a2b3c).setScrollFactor(0);
+    create() {
+        const { width, height } = this.scale;
 
-    // Add some "water" at the bottom
-    this.add.rectangle(400, 580, 800, 40, 0x0077be, 0.5).setScrollFactor(0);
+        this.add.rectangle(width / 2, height / 2, width, height, 0x8b0000);
 
-    // TEST RECTANGLE
-    this.add.rectangle(400, 300, 100, 100, 0xff00ff).setScrollFactor(0);
+        this.add.text(width / 2, height / 3, 'YOU DROWNED!', {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '40px',
+            fill: '#ffffff'
+        }).setOrigin(0.5);
 
-    // Create World Boundaries
-    this.matter.world.setBounds(0, 0, 2000, 600);
+        this.add.text(width / 2, height / 2, `FINAL SCORE: ${window.score || 0}`, {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '20px',
+            fill: '#ffcc00'
+        }).setOrigin(0.5);
 
-    // Initial Platforms (Wooden Docks)
-    createPlatform(this, 100, 500, 200, 40, 0x8b4513);
-    createPlatform(this, 1600, 500, 400, 40, 0x8b4513); // End platform
+        const restartText = this.add.text(width / 2, height * 2 / 3, 'PRESS ANY KEY TO RESTART', {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '15px',
+            fill: '#ffffff'
+        }).setOrigin(0.5);
 
-    // Floating Boats (Moving Platforms)
-    createBoat(this, 400, 450, 150, 40, 0x00aaff, 100, 0); // Horizontal boat
-    createBoat(this, 800, 400, 150, 40, 0x00aaff, 0, 100);  // Vertical boat
-    createBoat(this, 1200, 350, 150, 40, 0x00aaff, 150, 0); // Long horizontal boat
-
-    // Floating Anchor Points for Grappling Hook
-    createAnchor(this, 300, 200);
-    createAnchor(this, 600, 150);
-    createAnchor(this, 900, 200);
-    createAnchor(this, 1100, 150);
-    createAnchor(this, 1400, 100);
-
-    // Pepperonis (Collectibles)
-    this.pepperonis = [];
-    spawnPepperoni(this, 400, 380);
-    spawnPepperoni(this, 800, 300);
-    spawnPepperoni(this, 1200, 280);
-    spawnPepperoni(this, 1500, 200);
-
-    // Player
-    // player = new Player(this, 100, 400);
-
-    // Camera
-    this.cameras.main.setBounds(0, 0, 2000, 600);
-    // this.cameras.main.startFollow(player.sprite, true, 0.1, 0.1);
-
-    // UI Reference
-    scoreText = document.getElementById('score');
-
-    // Input
-    cursors = this.input.keyboard.createCursorKeys();
+        this.input.keyboard.on('keydown', () => {
+            this.scene.start('GameScene');
+        });
+    }
 }
 
-function update() {
-    /*
-    if (player) {
-        player.update(cursors);
+class GameScene extends Phaser.Scene {
+    constructor() {
+        super('GameScene');
     }
-    */
 
-    // Check Pepperoni Collection
-    /*
-    this.pepperonis.forEach((pep, index) => {
-        if (pep && Phaser.Math.Distance.Between(player.sprite.x, player.sprite.y, pep.x, pep.y) < 40) {
-            pep.destroy();
-            this.pepperonis.splice(index, 1);
-            score += 10;
-            scoreText.innerText = score;
+    preload() {
+        this.load.image('noid', 'assets/noid_sprite.png');
+        this.load.image('pepperoni', 'assets/pepperoni.png');
+        this.load.image('tileset', 'assets/tileset_port.png');
+    }
+
+    create() {
+        window.score = 0;
+        const worldWidth = 8000;
+        const worldHeight = 600;
+
+        this.lights.enable();
+        this.lights.setAmbientColor(0xffffff);
+
+        const bg = this.add.rectangle(worldWidth / 2, 300, worldWidth, 600, 0x87CEEB).setScrollFactor(0.2);
+        bg.setPipeline('Light2D');
+
+        for (let i = 0; i < worldWidth; i += 800) {
+            const water = this.add.rectangle(i + 400, 580, 800, 40, 0x0077be, 0.6).setScrollFactor(1);
+            water.setPipeline('Light2D');
+            this.matter.add.gameObject(water, { isStatic: true, isSensor: true, label: 'water' });
         }
-    });
-    */
+
+        this.matter.world.setBounds(0, 0, worldWidth, worldHeight);
+
+        // --- ENHANCED LEVEL DESIGN ---
+        createPlatform(this, 150, 520, 300, 60, 0x5d4037);
+        createPlatform(this, 500, 480, 200, 40, 0x5d4037);
+
+        // Bigger Boats
+        createBoat(this, 1000, 560, 250, 40, 0x8b4513, 300, 0);
+        createBoat(this, 1600, 550, 200, 40, 0x8b4513, 0, -40);
+        createBoat(this, 2200, 560, 250, 40, 0x8b4513, -200, 0);
+
+        // More Anchors
+        for (let i = 0; i < 10; i++) {
+            createAnchor(this, 2800 + (i * 400), 150 + (i % 2 * 100));
+        }
+
+        createPlatform(this, 4000, 450, 400, 40, 0x3e2723);
+
+        // Large Mid-Point Ship
+        createPlatform(this, 5500, 400, 800, 60, 0x3e2723);
+        createPlatform(this, 5500, 300, 400, 30, 0x3e2723);
+
+        // More Boats toward end
+        createBoat(this, 6500, 560, 300, 40, 0x8b4513, 400, 0);
+        createBoat(this, 7200, 560, 300, 40, 0x8b4513, -300, 0);
+
+        // End Goal
+        createPlatform(this, worldWidth - 150, 500, 300, 40, 0x2e7d32);
+
+        // --- MASSIVE PEPPERONI SPAWN ---
+        this.pepperonis = [];
+        for (let x = 400; x < worldWidth - 400; x += 200) {
+            spawnPepperoni(this, x, 250 + Math.random() * 200);
+        }
+
+        player = new Player(this, 100, 400);
+        player.sprite.setPipeline('Light2D');
+
+        this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+        this.cameras.main.startFollow(player.sprite, true, 0.1, 0.1);
+
+        scoreText = document.getElementById('score');
+        if (scoreText) scoreText.innerText = '0';
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+
+        this.matter.world.on('collisionstart', (event) => {
+            event.pairs.forEach(pair => {
+                const labels = [pair.bodyA.label, pair.bodyB.label];
+                if (labels.includes('player') && labels.includes('water')) {
+                    this.scene.start('GameOverScene');
+                }
+            });
+        });
+    }
+
+    update() {
+        if (player) {
+            player.update(this.cursors);
+        }
+
+        this.pepperonis.forEach((pep, index) => {
+            if (pep && pep.active && Phaser.Math.Distance.Between(player.sprite.x, player.sprite.y, pep.x, pep.y) < 40) {
+                pep.destroy();
+                this.pepperonis.splice(index, 1);
+                window.score += 10;
+                if (scoreText) scoreText.innerText = window.score;
+            }
+        });
+    }
 }
 
 function createPlatform(scene, x, y, width, height, color) {
     const plat = scene.add.rectangle(x, y, width, height, color);
+    plat.setPipeline('Light2D');
     scene.matter.add.gameObject(plat, { isStatic: true });
 }
 
 function createBoat(scene, x, y, width, height, color, moveX, moveY) {
     const boat = scene.add.rectangle(x, y, width, height, color);
+    boat.setPipeline('Light2D');
     scene.matter.add.gameObject(boat, { isStatic: true });
 
-    // Moving boat animation
     scene.tweens.add({
         targets: boat,
         x: x + moveX,
@@ -123,31 +195,47 @@ function createBoat(scene, x, y, width, height, color, moveX, moveY) {
         repeat: -1,
         ease: 'Sine.easeInOut',
         onUpdate: () => {
-            // Necessary to update Matter body position
-            boat.setX(boat.x);
-            boat.setY(boat.y);
+            if (boat.body) {
+                boat.setX(boat.x);
+                boat.setY(boat.y);
+            }
         }
     });
 }
 
 function createAnchor(scene, x, y) {
-    const anchor = scene.add.circle(x, y, 10, 0xffcc00);
+    const anchor = scene.add.circle(x, y, 12, 0xffcc00);
+    anchor.setPipeline('Light2D');
     scene.matter.add.gameObject(anchor, { isStatic: true, label: 'anchor' });
-    // Add a little visual effect
-    scene.add.circle(x, y, 15, 0xffcc00, 0.2);
 }
 
 function spawnPepperoni(scene, x, y) {
-    const pep = scene.add.circle(x, y, 8, 0xff3300);
+    const pep = scene.add.circle(x, y, 12, 0xff3300);
+    pep.setPipeline('Light2D');
     scene.pepperonis.push(pep);
 
-    // Floating animation
     scene.tweens.add({
         targets: pep,
-        y: y - 10,
-        duration: 1500,
+        y: y - 20,
+        duration: 2000,
         yoyo: true,
         repeat: -1,
         ease: 'Sine.easeInOut'
     });
 }
+
+const config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    parent: 'game-container',
+    physics: {
+        default: 'matter',
+        matter: { gravity: { y: 1 }, debug: false }
+    },
+    scene: [TitleScene, GameScene, GameOverScene]
+};
+
+const game = new Phaser.Game(config);
+let player;
+let scoreText;
